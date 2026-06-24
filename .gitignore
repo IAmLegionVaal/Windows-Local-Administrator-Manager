@@ -1,0 +1,20 @@
+# Runtime logs
+*.log
+
+# Local secrets and environment files
+.env
+.env.*
+secrets/
+*.credential
+*.credentials
+*.clixml
+
+# PowerShell temporary files
+*.tmp
+*.bak
+
+# Editor and OS metadata
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
