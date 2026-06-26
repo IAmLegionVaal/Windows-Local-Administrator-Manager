@@ -49,7 +49,7 @@
     .\Set-LocalAdministrator.ps1 -Username 'SupportAdmin' -PasswordNeverExpires
 
 .NOTES
-    Version: 1.0.0
+    Version: 1.0.1
     Author: Dewald Pretorius (IAmLegionVaal)
     Must run from an elevated PowerShell session or as Local System.
 
@@ -66,7 +66,7 @@ param(
     [Parameter()]
     [ValidateNotNullOrEmpty()]
     [ValidateLength(1, 20)]
-    [ValidatePattern('^[^\\/:*?"<>|]+$')]
+    [ValidatePattern('^[^\/:*?"<>|]+$')]
     [string]$Username = 'SupportAdmin',
 
     [Parameter()]
@@ -159,8 +159,19 @@ function Resolve-AccountPassword {
     )
 
     if (-not [string]::IsNullOrWhiteSpace($EnvironmentPassword)) {
+        $SecureEnvironmentPassword = [System.Security.SecureString]::new()
+
         try {
-            return ConvertTo-SecureString -String $EnvironmentPassword -AsPlainText -Force
+            foreach ($Character in $EnvironmentPassword.ToCharArray()) {
+                $SecureEnvironmentPassword.AppendChar($Character)
+            }
+
+            $SecureEnvironmentPassword.MakeReadOnly()
+            return $SecureEnvironmentPassword
+        }
+        catch {
+            $SecureEnvironmentPassword.Dispose()
+            throw
         }
         finally {
             [Environment]::SetEnvironmentVariable(
@@ -367,7 +378,10 @@ catch {
     Write-OperationalLog -Level 'ERROR' -Message $_.Exception.Message
 }
 finally {
-    $script:ResolvedPassword = $null
+    if ($null -ne $script:ResolvedPassword) {
+        $script:ResolvedPassword.Dispose()
+        $script:ResolvedPassword = $null
+    }
 }
 
 exit $script:ExitCode

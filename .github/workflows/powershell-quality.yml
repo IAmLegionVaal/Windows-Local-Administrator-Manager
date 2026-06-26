@@ -1,0 +1,63 @@
+name: PowerShell Quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse PowerShell files
+        shell: pwsh
+        run: |
+          $failed = $false
+          Get-ChildItem . -Filter '*.ps1' -File -Recurse | ForEach-Object {
+              $tokens = $null
+              $errors = $null
+              [System.Management.Automation.Language.Parser]::ParseFile(
+                  $_.FullName,
+                  [ref]$tokens,
+                  [ref]$errors
+              ) | Out-Null
+
+              if ($errors.Count -gt 0) {
+                  $failed = $true
+                  $errors | ForEach-Object {
+                      Write-Error "$($_.Extent.File):$($_.Extent.StartLineNumber): $($_.Message)"
+                  }
+              }
+          }
+
+          if ($failed) {
+              throw 'PowerShell parser validation failed.'
+          }
+
+      - name: Run PSScriptAnalyzer errors
+        shell: pwsh
+        run: |
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
+          $findings = @(Invoke-ScriptAnalyzer -Path . -Recurse -Severity Error)
+          $findings | Select-Object RuleName,Severity,ScriptName,Line,Column,Message |
+              ConvertTo-Json -Depth 4 |
+              Set-Content -LiteralPath analyzer-findings.json -Encoding UTF8
+          if ($findings.Count -gt 0) {
+              $findings | Format-Table -AutoSize | Out-String | Write-Host
+              throw 'PSScriptAnalyzer reported errors.'
+          }
+
+      - name: Upload analyzer findings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: analyzer-findings
+          path: analyzer-findings.json
+          if-no-files-found: warn
+          retention-days: 7
